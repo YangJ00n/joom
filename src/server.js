@@ -1,5 +1,5 @@
 import http from "http";
-import WebSocket from "ws";
+import SocketIO from "socket.io";
 import express from "express";
 
 const app = express();
@@ -17,34 +17,17 @@ app.get("/*", (_, res) => res.redirect("/"));
 const handleListen = () =>
   console.log(`✅ Listening on http://localhost:${PORT}`);
 
-// http 서버 위에 WebSocket 서버를 만듦 -> 두 protocol이 같은 port를 공유함
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+// http 서버 위에 SocketIO 서버를 만듦 -> 두 protocol이 같은 port를 공유함
+const httpServer = http.createServer(app);
+const wsServer = SocketIO(httpServer);
 
-const sockets = [];
-
-wss.on("connection", (socket) => {
-  console.log("✅ Connected to Browser");
-  sockets.push(socket);
-  socket["nickname"] = "Anon";
-
-  socket.on("close", () => {
-    console.log("❌ Disconnected from the Browser");
-  });
-
-  socket.on("message", (msg) => {
-    const message = JSON.parse(msg);
-    switch (message.type) {
-      case "new_message":
-        sockets.forEach((aSocket) =>
-          aSocket.send(`${socket.nickname}: ${message.payload}`)
-        );
-        break;
-      case "nickname":
-        socket["nickname"] = message.payload;
-        break;
-    }
+wsServer.on("connection", (socket) => {
+  socket.on("enter_room", (roomName, done) => {
+    console.log(roomName);
+    setTimeout(() => {
+      done("hello from the backend!");
+    }, 3000);
   });
 });
 
-server.listen(3000, handleListen);
+httpServer.listen(3000, handleListen);
