@@ -1,5 +1,6 @@
 import http from "http";
-import SocketIO from "socket.io";
+import { Server } from "socket.io";
+import { instrument } from "@socket.io/admin-ui";
 import express from "express";
 
 const app = express();
@@ -19,7 +20,15 @@ const handleListen = () =>
 
 // http 서버 위에 SocketIO 서버를 만듦 -> 두 protocol이 같은 port를 공유함
 const httpServer = http.createServer(app);
-const wsServer = SocketIO(httpServer);
+const wsServer = new Server(httpServer, {
+  cors: {
+    origin: ["https://admin.socket.io"],
+    credentials: true,
+  },
+});
+instrument(wsServer, {
+  auth: false,
+});
 
 const publicRooms = () => {
   const {
@@ -36,6 +45,10 @@ const publicRooms = () => {
   return publicRooms;
 };
 
+const countRoom = (roomName) => {
+  return wsServer.sockets.adapter.rooms.get(roomName)?.size;
+};
+
 wsServer.on("connection", (socket) => {
   socket["nickname"] = "Anon";
   wsServer.sockets.emit("room_change", publicRooms());
@@ -47,15 +60,15 @@ wsServer.on("connection", (socket) => {
   socket.on("enter_room", (nickname, roomName, done) => {
     socket["nickname"] = nickname;
     socket.join(roomName);
-    done();
-    socket.to(roomName).emit("welcome", socket.nickname);
+    done(countRoom(roomName));
+    socket.to(roomName).emit("welcome", socket.nickname, countRoom(roomName));
     wsServer.sockets.emit("room_change", publicRooms());
   });
 
   // disconnecting event는 socket이 방을 떠나기 바로 직전에 발생한다.
   socket.on("disconnecting", () => {
     socket.rooms.forEach((room) => {
-      socket.to(room).emit("bye", socket.nickname);
+      socket.to(room).emit("bye", socket.nickname, countRoom(room) - 1);
     });
   });
   socket.on("disconnect", () => {
