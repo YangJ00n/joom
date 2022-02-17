@@ -21,8 +21,25 @@ const handleListen = () =>
 const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
 
+const publicRooms = () => {
+  const {
+    sockets: {
+      adapter: { sids, rooms },
+    },
+  } = wsServer;
+  const publicRooms = [];
+  rooms.forEach((_, key) => {
+    if (sids.get(key) === undefined) {
+      publicRooms.push(key);
+    }
+  });
+  return publicRooms;
+};
+
 wsServer.on("connection", (socket) => {
   socket["nickname"] = "Anon";
+  wsServer.sockets.emit("room_change", publicRooms());
+
   socket.onAny((event) => {
     console.log(`Socket Event: ${event}`);
   });
@@ -32,12 +49,17 @@ wsServer.on("connection", (socket) => {
     socket.join(roomName);
     done();
     socket.to(roomName).emit("welcome", socket.nickname);
+    wsServer.sockets.emit("room_change", publicRooms());
   });
 
+  // disconnecting event는 socket이 방을 떠나기 바로 직전에 발생한다.
   socket.on("disconnecting", () => {
     socket.rooms.forEach((room) => {
       socket.to(room).emit("bye", socket.nickname);
     });
+  });
+  socket.on("disconnect", () => {
+    wsServer.sockets.emit("room_change", publicRooms());
   });
 
   socket.on("new_message", (msg, room, done) => {
