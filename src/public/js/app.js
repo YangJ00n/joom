@@ -13,6 +13,7 @@ let myStream;
 let muted = false;
 let cameraOff = false;
 let roomName;
+let myPeerConnection;
 
 const getCameras = async () => {
   try {
@@ -108,6 +109,7 @@ const startMedia = async () => {
   welcome.hidden = true;
   call.hidden = false;
   await getMedia();
+  makeConnection();
 };
 
 const handleWelcomeSubmit = (event) => {
@@ -122,6 +124,25 @@ welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 
 // Socket Code
 
-socket.on("welcome", () => {
-  console.log("somebody join");
+socket.on("welcome", async () => {
+  // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
+  const offer = await myPeerConnection.createOffer();
+  myPeerConnection.setLocalDescription(offer);
+  socket.emit("offer", offer, roomName);
 });
+
+socket.on("offer", (offer) => {
+  // 이 코드는 방 참가자에게만 작동한다. (2명 기준)
+  console.log(offer);
+});
+
+// RTC Code
+
+const makeConnection = () => {
+  // 양쪽에서 peer-to-peer connection을 만듦.
+  myPeerConnection = new RTCPeerConnection();
+  // 그 다음 양쪽에서 카메라와 마이크의 데이터 stream을 받아서 연결안에 집어 넣음.
+  myStream
+    .getTracks()
+    .forEach((track) => myPeerConnection.addTrack(track, myStream));
+};
