@@ -84,6 +84,7 @@ const handleCameraClick = () => {
 
 const handleCameraChange = async () => {
   await getMedia(camerasSelect.value);
+
   if (muted) {
     myStream
       .getAudioTracks()
@@ -94,13 +95,21 @@ const handleCameraChange = async () => {
       .getVideoTracks()
       .forEach((track) => (track.enabled = !track.enabled));
   }
+
+  if (myPeerConnection) {
+    const videoTrack = myStream.getVideoTracks()[0];
+    const videoSender = myPeerConnection
+      .getSenders()
+      .find((sender) => sender.track.kind === "video");
+    videoSender.replaceTrack(videoTrack);
+  }
 };
 
 muteBtn.addEventListener("click", handleMuteClick);
 cameraBtn.addEventListener("click", handleCameraClick);
 camerasSelect.addEventListener("input", handleCameraChange);
 
-// Welcome Form (join a room)
+// ⭐️ Welcome Form (join a room)
 
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
@@ -123,35 +132,72 @@ const handleWelcomeSubmit = async (event) => {
 
 welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 
-// Socket Code
+// ⭐️ Socket Code
 
 socket.on("welcome", async () => {
   // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
   socket.emit("offer", offer, roomName);
+  console.log("✅ sent the offer");
 });
 
 socket.on("offer", async (offer) => {
+  console.log("✅ received the offer");
   // 이 코드는 방 참가자에게만 작동한다. (2명 기준)
   myPeerConnection.setRemoteDescription(offer);
   const answer = await myPeerConnection.createAnswer();
   myPeerConnection.setLocalDescription(answer);
   socket.emit("answer", answer, roomName);
+  console.log("✅ sent the answer");
 });
 
 socket.on("answer", (answer) => {
+  console.log("✅ received the answer");
   // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
   myPeerConnection.setRemoteDescription(answer);
 });
 
-// RTC Code
+socket.on("ice", (ice) => {
+  console.log("✅ received candidate");
+  myPeerConnection.addIceCandidate(ice);
+});
+
+// ⭐️ RTC Code
 
 const makeConnection = () => {
   // 양쪽에서 peer-to-peer connection을 만듦.
-  myPeerConnection = new RTCPeerConnection();
+  myPeerConnection = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: [
+          "stun:stun.l.google.com:19302",
+          "stun:stun1.l.google.com:19302",
+          "stun:stun2.l.google.com:19302",
+          "stun:stun3.l.google.com:19302",
+          "stun:stun4.l.google.com:19302",
+        ],
+      },
+    ],
+  });
+
+  myPeerConnection.addEventListener("icecandidate", handleIce);
+  myPeerConnection.addEventListener("addstream", handleAddStream);
+
   // 그 다음 양쪽에서 카메라와 마이크의 데이터 stream을 받아서 연결안에 집어 넣음.
   myStream
     .getTracks()
     .forEach((track) => myPeerConnection.addTrack(track, myStream));
+};
+
+const handleIce = (data) => {
+  console.log("✅ sent candidate");
+  socket.emit("ice", data.candidate, roomName);
+};
+
+const handleAddStream = (data) => {
+  console.log("✅ got an stream from my peer");
+  // console.log(data);
+  const peerFace = document.getElementById("peerFace");
+  peerFace.srcObject = data.stream;
 };
