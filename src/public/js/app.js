@@ -14,6 +14,7 @@ let muted = false;
 let cameraOff = false;
 let roomName;
 let myPeerConnection;
+let myDataChannel;
 
 const getCameras = async () => {
   try {
@@ -136,30 +137,36 @@ welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 
 socket.on("welcome", async () => {
   // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
+  myDataChannel = myPeerConnection.createDataChannel("chat");
+  myDataChannel.addEventListener("message", (event) => console.log(event.data));
+  console.log("✅ made data channel");
+
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
   socket.emit("offer", offer, roomName);
-  console.log("✅ sent the offer");
 });
 
 socket.on("offer", async (offer) => {
-  console.log("✅ received the offer");
   // 이 코드는 방 참가자에게만 작동한다. (2명 기준)
+  myPeerConnection.addEventListener("datachannel", (event) => {
+    myDataChannel = event.channel;
+    myDataChannel.addEventListener("message", (event) =>
+      console.log(event.data)
+    );
+  });
+
   myPeerConnection.setRemoteDescription(offer);
   const answer = await myPeerConnection.createAnswer();
   myPeerConnection.setLocalDescription(answer);
   socket.emit("answer", answer, roomName);
-  console.log("✅ sent the answer");
 });
 
 socket.on("answer", (answer) => {
-  console.log("✅ received the answer");
   // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
   myPeerConnection.setRemoteDescription(answer);
 });
 
 socket.on("ice", (ice) => {
-  console.log("✅ received candidate");
   myPeerConnection.addIceCandidate(ice);
 });
 
@@ -191,13 +198,10 @@ const makeConnection = () => {
 };
 
 const handleIce = (data) => {
-  console.log("✅ sent candidate");
   socket.emit("ice", data.candidate, roomName);
 };
 
 const handleAddStream = (data) => {
-  console.log("✅ got an stream from my peer");
-  // console.log(data);
   const peerFace = document.getElementById("peerFace");
   peerFace.srcObject = data.stream;
 };
