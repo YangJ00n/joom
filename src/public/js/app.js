@@ -2,12 +2,18 @@ const socket = io();
 
 const myFace = document.getElementById("myFace");
 const muteBtn = document.getElementById("mute");
+const muteIcon = muteBtn.querySelector("i");
 const cameraBtn = document.getElementById("camera");
+const cameraIcon = cameraBtn.querySelector("i");
 const camerasSelect = document.getElementById("cameras");
 
 const call = document.getElementById("call");
+const peerFace = document.getElementById("peerFace");
 
-call.hidden = true;
+const NONE_CN = "none";
+
+call.classList.add(NONE_CN);
+peerFace.classList.add(NONE_CN);
 
 let myStream;
 let muted = false;
@@ -63,10 +69,10 @@ const handleMuteClick = () => {
     .getAudioTracks()
     .forEach((track) => (track.enabled = !track.enabled));
   if (!muted) {
-    muteBtn.innerText = "Unmute";
+    muteIcon.className = "fas fa-microphone-slash";
     muted = true;
   } else {
-    muteBtn.innerText = "Mute";
+    muteIcon.className = "fas fa-microphone";
     muted = false;
   }
 };
@@ -75,10 +81,10 @@ const handleCameraClick = () => {
     .getVideoTracks()
     .forEach((track) => (track.enabled = !track.enabled));
   if (cameraOff) {
-    cameraBtn.innerText = "Turn Camera Off";
+    cameraIcon.className = "fas fa-video";
     cameraOff = false;
   } else {
-    cameraBtn.innerText = "Turn Camera On";
+    cameraIcon.className = "fas fa-video-slash";
     cameraOff = true;
   }
 };
@@ -115,11 +121,17 @@ camerasSelect.addEventListener("input", handleCameraChange);
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
 
+const handleBeforeunload = (event) => {
+  event.preventDefault();
+  event.returnValue = "";
+};
+
 const initCall = async () => {
-  welcome.hidden = true;
-  call.hidden = false;
+  welcome.classList.add(NONE_CN);
+  call.classList.remove(NONE_CN);
   await getMedia();
   makeConnection();
+  window.addEventListener("beforeunload", handleBeforeunload);
 };
 
 const handleWelcomeSubmit = async (event) => {
@@ -138,8 +150,7 @@ welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 socket.on("welcome", async () => {
   // 이 코드는 방 호스트에게만 작동한다. (2명 기준)
   myDataChannel = myPeerConnection.createDataChannel("chat");
-  myDataChannel.addEventListener("message", (event) => console.log(event.data));
-  console.log("✅ made data channel");
+  myDataChannel.addEventListener("message", (event) => addMessage(event.data));
 
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
@@ -151,7 +162,7 @@ socket.on("offer", async (offer) => {
   myPeerConnection.addEventListener("datachannel", (event) => {
     myDataChannel = event.channel;
     myDataChannel.addEventListener("message", (event) =>
-      console.log(event.data)
+      addMessage(event.data)
     );
   });
 
@@ -202,6 +213,37 @@ const handleIce = (data) => {
 };
 
 const handleAddStream = (data) => {
-  const peerFace = document.getElementById("peerFace");
+  peerFace.classList.remove(NONE_CN);
+  chat.classList.remove(NONE_CN);
   peerFace.srcObject = data.stream;
 };
+
+// ⭐️ Chat
+
+const chat = document.getElementById("chat");
+const chatForm = chat.querySelector("form");
+const chatList = chat.querySelector("ul");
+
+chat.classList.add(NONE_CN);
+
+const addMessage = (msg, isYourMsg = false) => {
+  const span = document.createElement("span");
+  span.innerText = msg;
+  const li = document.createElement("li");
+  li.appendChild(span);
+  if (isYourMsg) {
+    li.className = "chat__youSent";
+  }
+  chatList.appendChild(li);
+};
+
+const handleChatSubmit = (event) => {
+  event.preventDefault();
+  const input = chatForm.querySelector("input");
+  myDataChannel.send(input.value);
+  addMessage(input.value, (isYourMsg = true));
+  input.value = "";
+  chatList.scrollTo(0, chatList.scrollHeight);
+};
+
+chatForm.addEventListener("submit", handleChatSubmit);
